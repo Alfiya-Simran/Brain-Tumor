@@ -1,28 +1,33 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.models import load_model
+from PIL import Image
+import onnxruntime as ort
 
-# Load trained model
-model = load_model("brain_tumor_cnn.keras")  # Ensure this file exists in your working dir
+# Load ONNX model
+MODEL_PATH = "brain_tumor_cnn.onnx"
+session = ort.InferenceSession(MODEL_PATH)
 
-st.title("Brain Tumor Classification")
+# Get input/output names
+input_name = session.get_inputs()[0].name
+output_name = session.get_outputs()[0].name
+
+# Streamlit UI
+st.title("Brain Tumor Classification (ONNX Model)")
 uploaded_file = st.file_uploader("Upload an MRI Image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Display uploaded image
-    st.image(uploaded_file, caption='Uploaded Image', use_container_width=True)
+    # Show uploaded image
+    img = Image.open(uploaded_file).convert("RGB")
+    st.image(img, caption="Uploaded Image", use_container_width=True)
 
-    # Preprocess Image (match training settings)
-    img = image.load_img(uploaded_file, target_size=(128, 128))  # match training
-    img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = img_array / 255.0  # same normalization as training
+    # Preprocess (match training)
+    img = img.resize((128, 128))
+    img_array = np.expand_dims(np.array(img) / 255.0, axis=0).astype(np.float32)
 
-    # Prediction
-    prediction = model.predict(img_array)
-    class_index = np.argmax(prediction, axis=1)[0]
+    # Inference
+    prediction = session.run([output_name], {input_name: img_array})[0]
+    class_index = np.argmax(prediction)
 
-    # Replace with your own class names
+    # Your class names
     class_names = ["Glioma", "Meningioma", "No Tumor", "Pituitary"]
     st.write(f"**Prediction:** {class_names[class_index]}")
